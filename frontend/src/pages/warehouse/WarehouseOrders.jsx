@@ -1,13 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-
-const STATUS_META = {
-  pending:  { badge: 'bg-warning text-dark', icon: 'bi-hourglass-split', label: 'Pending' },
-  accepted: { badge: 'bg-success',           icon: 'bi-check-circle',    label: 'Accepted' },
-  rejected: { badge: 'bg-danger',            icon: 'bi-x-circle',        label: 'Rejected' },
-};
+import { translateText } from '../../services/translate';
 
 export default function WarehouseOrders() {
   const [orders, setOrders] = useState([]);
@@ -15,6 +11,7 @@ export default function WarehouseOrders() {
   const [processing, setProcessing] = useState(null);
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation();
 
   useEffect(() => {
     if (!user || user.role !== 'warehouse') navigate('/warehouse/login');
@@ -22,14 +19,28 @@ export default function WarehouseOrders() {
 
   useEffect(() => { fetchOrders(); }, []);
 
+  useEffect(() => {
+    if (orders.length) translateOrderItems(orders);
+  }, [i18n.language]);
+
+  const translateOrderItems = async (rawOrders) => {
+    const lang = i18n.language?.startsWith('pt') ? 'pt' : 'en';
+    const translated = await Promise.all(rawOrders.map(async (order) => ({
+      ...order,
+      OrderItems: await Promise.all((order.OrderItems || []).map(async (oi) => ({
+        ...oi,
+        Item: oi.Item ? { ...oi.Item, name: await translateText(oi.Item.name, lang) } : oi.Item,
+      }))),
+    })));
+    setOrders(translated);
+  };
+
   const fetchOrders = async () => {
     setLoading(true);
     try {
       const { data } = await api.get('/orders/warehouse');
-      setOrders(data);
-    } finally {
-      setLoading(false);
-    }
+      await translateOrderItems(data);
+    } finally { setLoading(false); }
   };
 
   const handleStatus = async (orderId, status) => {
@@ -39,9 +50,7 @@ export default function WarehouseOrders() {
       fetchOrders();
     } catch (err) {
       alert(err.response?.data?.error || 'Error updating order');
-    } finally {
-      setProcessing(null);
-    }
+    } finally { setProcessing(null); }
   };
 
   const counts = {
@@ -50,38 +59,40 @@ export default function WarehouseOrders() {
     rejected: orders.filter((o) => o.status === 'rejected').length,
   };
 
-  if (loading) return (
-    <div className="d-flex align-items-center justify-content-center" style={{ minHeight: '60vh' }}>
-      <div className="spinner-border" />
-    </div>
-  );
+  const statusMeta = (status) => ({
+    pending:  { badge: 'bg-warning text-dark', icon: 'bi-hourglass-split', label: t('orders.status.pending') },
+    accepted: { badge: 'bg-success',           icon: 'bi-check-circle',    label: t('orders.status.accepted') },
+    rejected: { badge: 'bg-danger',            icon: 'bi-x-circle',        label: t('orders.status.rejected') },
+  }[status]);
+
+  if (loading) return <div className="d-flex align-items-center justify-content-center" style={{ minHeight: '60vh' }}><div className="spinner-border" /></div>;
 
   return (
     <>
       <div className="page-header">
-        <h1 className="page-title">Orders</h1>
-        <p className="page-subtitle">Review and process incoming store orders</p>
+        <h1 className="page-title">{t('orders.warehouseTitle')}</h1>
+        <p className="page-subtitle">{t('orders.warehouseSubtitle')}</p>
       </div>
 
       <div className="stats-row">
         <div className="stat-card" style={{ '--accent-color': '#f59e0b' }}>
           <div className="stat-value">{counts.pending}</div>
-          <div className="stat-label">Pending</div>
+          <div className="stat-label">{t('orders.awaiting')}</div>
           <i className="bi bi-hourglass-split stat-icon" />
         </div>
         <div className="stat-card" style={{ '--accent-color': '#22c55e' }}>
           <div className="stat-value">{counts.accepted}</div>
-          <div className="stat-label">Accepted</div>
+          <div className="stat-label">{t('orders.accepted')}</div>
           <i className="bi bi-check-circle stat-icon" />
         </div>
         <div className="stat-card" style={{ '--accent-color': '#ef4444' }}>
           <div className="stat-value">{counts.rejected}</div>
-          <div className="stat-label">Rejected</div>
+          <div className="stat-label">{t('orders.rejected')}</div>
           <i className="bi bi-x-circle stat-icon" />
         </div>
         <div className="stat-card" style={{ '--accent-color': 'var(--brand)' }}>
           <div className="stat-value">{orders.length}</div>
-          <div className="stat-label">Total</div>
+          <div className="stat-label">{t('orders.total')}</div>
           <i className="bi bi-inbox stat-icon" />
         </div>
       </div>
@@ -91,45 +102,35 @@ export default function WarehouseOrders() {
           <div className="card">
             <div className="empty-state">
               <i className="bi bi-inbox" />
-              <p>No orders received yet.<br />Orders from stores will appear here.</p>
+              <p>{t('orders.noWarehouseOrders')}<br />{t('orders.noWarehouseOrdersSub')}</p>
             </div>
           </div>
         ) : (
           orders.map((order) => {
-            const meta = STATUS_META[order.status];
+            const meta = statusMeta(order.status);
             return (
               <div key={order.id} className="order-card">
                 <div className="order-card-header">
                   <div className="d-flex align-items-center gap-3">
                     <div>
-                      <span className="fw-semibold" style={{ fontSize: '0.9rem' }}>Order #{order.id}</span>
+                      <span className="fw-semibold" style={{ fontSize: '0.9rem' }}>{t('orders.orderNum')}{order.id}</span>
                       <span className="ms-2 text-muted" style={{ fontSize: '0.8rem' }}>
-                        from <strong>{order.Store?.name}</strong>
+                        {t('orders.from')} <strong>{order.Store?.name}</strong>
                       </span>
                     </div>
-                    <span className={`badge ${meta.badge}`}>
-                      <i className={`bi ${meta.icon} me-1`} />{meta.label}
-                    </span>
+                    <span className={`badge ${meta.badge}`}><i className={`bi ${meta.icon} me-1`} />{meta.label}</span>
                   </div>
                   <div className="d-flex align-items-center gap-2">
                     <span className="text-muted" style={{ fontSize: '0.78rem' }}>
-                      {new Date(order.createdAt).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' })}
+                      {new Date(order.createdAt).toLocaleDateString(i18n.language?.startsWith('pt') ? 'pt-PT' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                     </span>
                     {order.status === 'pending' && (
                       <>
-                        <button
-                          className="btn btn-success btn-sm"
-                          onClick={() => handleStatus(order.id, 'accepted')}
-                          disabled={processing === order.id}
-                        >
-                          <i className="bi bi-check-lg me-1" />Accept
+                        <button className="btn btn-success btn-sm" onClick={() => handleStatus(order.id, 'accepted')} disabled={processing === order.id}>
+                          <i className="bi bi-check-lg me-1" />{t('orders.accept')}
                         </button>
-                        <button
-                          className="btn btn-outline-danger btn-sm"
-                          onClick={() => handleStatus(order.id, 'rejected')}
-                          disabled={processing === order.id}
-                        >
-                          <i className="bi bi-x-lg me-1" />Reject
+                        <button className="btn btn-outline-danger btn-sm" onClick={() => handleStatus(order.id, 'rejected')} disabled={processing === order.id}>
+                          <i className="bi bi-x-lg me-1" />{t('orders.reject')}
                         </button>
                       </>
                     )}
@@ -139,9 +140,9 @@ export default function WarehouseOrders() {
                   <table className="table">
                     <thead>
                       <tr>
-                        <th>Item</th>
-                        <th>Qty Requested</th>
-                        <th>Unit</th>
+                        <th>{t('orders.itemCol')}</th>
+                        <th>{t('orders.qtyRequested')}</th>
+                        <th>{t('orders.unitCol')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -157,7 +158,7 @@ export default function WarehouseOrders() {
                 </div>
                 {order.notes && (
                   <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid var(--border)', fontSize: '0.8rem', color: 'var(--muted)' }}>
-                    <i className="bi bi-chat-left-text me-1" />Notes: {order.notes}
+                    <i className="bi bi-chat-left-text me-1" />{t('orders.notes')}: {order.notes}
                   </div>
                 )}
               </div>
