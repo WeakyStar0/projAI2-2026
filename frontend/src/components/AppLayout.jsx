@@ -44,9 +44,14 @@ export default function AppLayout({ children }) {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-logo">
-          <div className="logo-text"><span>Stock</span>er</div>
-          <div className="logo-sub">
-            {user?.role === 'warehouse' ? t('nav.warehousePortal') : t('nav.storePortal')}
+          <div className="d-flex justify-content-between align-items-start">
+            <div>
+              <div className="logo-text"><span>Stock</span>er</div>
+              <div className="logo-sub">
+                {user?.role === 'warehouse' ? t('nav.warehousePortal') : t('nav.storePortal')}
+              </div>
+            </div>
+            <LangSwitcher />
           </div>
         </div>
 
@@ -84,9 +89,6 @@ export default function AppLayout({ children }) {
               <div className="name">{user?.name}</div>
               <div className="role">{user?.role}</div>
             </div>
-          </div>
-          <div className="d-flex gap-2 mb-2">
-            <LangSwitcher style={{ flex: 1, justifyContent: 'center' }} />
           </div>
           <button className="sidebar-logout" onClick={handleLogout}>
             <i className="bi bi-box-arrow-right" />
