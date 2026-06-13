@@ -6,7 +6,7 @@ const { sequelize } = require('./models');
 const app = express();
 
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
+  origin: (origin, cb) => cb(null, true),
   credentials: true,
 }));
 app.use(express.json());
